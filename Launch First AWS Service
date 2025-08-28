@@ -1,0 +1,87 @@
+################################################## Launch First AWS Service #######################################################
+1) Prerequisites
+AWS account (Free Tier is fine).
+Git Bash installed on Windows.
+Your network must allow outbound TCP/22.
+
+2) Launch EC2 (AWS Console)
+Console → EC2 → Instances → Launch instance
+Name: e.g., my-first-ec2
+
+
+AMI:
+Amazon Linux 2023 (good default) or Ubuntu 24.04 LTS.
+
+Instance type: t2.micro (Free Tier).
+
+
+Key pair (login):
+Click Create new key pair → Type: RSA → File format: .pem → Create key pair (a .pem downloads).
+
+
+Network settings:
+
+VPC/Subnet: leave default (or choose).
+Auto-assign public IP: Enable.
+Security group: Create new, add rule:
+Type: SSH, Port: 22, Source: My IP (recommended).
+Storage: default is fine (e.g., 8 GiB gp3).
+Click Launch instance → then View all instances.
+Wait until Status checks: 2/2 checks passed.
+Copy the Public IPv4 DNS (or Public IPv4 address).
+
+
+
+3) Prepare the key in Git Bash (Windows)
+Use Git Bash terminal.
+# 1) Create an SSH folder if it doesn't exist
+mkdir -p ~/.ssh
+
+# 2) Move the downloaded key here (adjust the filename and path)
+mv ~/Downloads/my-first-key.pem ~/.ssh/
+
+# 3) Set permissions (required by ssh)
+chmod 400 ~/.ssh/my-first-key.pem
+
+If chmod 400 doesn’t “stick” on Windows, run these in Command Prompt (cmd) for the same file:
+icacls "%USERPROFILE%\.ssh\my-first-key.pem" /inheritance:r
+icacls "%USERPROFILE%\.ssh\my-first-key.pem" /grant:r %USERNAME%:R
+
+
+4) SSH from Git Bash
+Use the correct default username (depends on AMI):
+Amazon Linux → ec2-user
+
+
+Ubuntu → ubuntu
+
+
+# Amazon Linux example:
+ssh -i ~/.ssh/my-first-key.pem ec2-user@<PUBLIC_DNS_OR_IP>
+
+# Ubuntu example:
+ssh -i ~/.ssh/my-first-key.pem ubuntu@<PUBLIC_DNS_OR_IP>
+
+First connection: type yes to accept the host fingerprint.
+ Inside the server, try:
+whoami
+uname -a
+
+
+5) Common gotchas (quick checks)
+Permission denied (publickey):
+Wrong username (use ec2-user for Amazon Linux, ubuntu for Ubuntu).
+Key file perms not restricted (chmod 400 or icacls).
+Connected to wrong instance/IP.
+No route / timeout
+Security Group missing inbound SSH (22) from your IP.
+No public IP assigned / using a private subnet without a bastion or SSM.
+Still blocked: Your office/home firewall may block outbound 22.
+
+
+
+6) Optional (nice to do)
+Use Session Manager (no SSH keys) by attaching the SSM role to the instance and opening AWS Systems Manager → Session Manager. Great when port 22 is blocked.
+
+
+
