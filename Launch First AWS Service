@@ -11,7 +11,6 @@ Name: e.g., my-first-ec2
 
 AMI:
 Amazon Linux 2023 (good default) or Ubuntu 24.04 LTS.
-
 Instance type: t2.micro (Free Tier).
 
 
