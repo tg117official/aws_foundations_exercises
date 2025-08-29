@@ -152,3 +152,17 @@ AWS_Access_Key_Configuration_and_Usage_for_programatic_access :
         s3 = session.client("s3")
         print(s3.list_buckets())
 
+    Method_5_Setting Environment variables in the script : 
+        import os
+        import boto3
+        
+        # Set environment variables within the script
+        os.environ["AWS_ACCESS_KEY_ID"] = "AKIAxxxxxxxxxxxxxxx"
+        os.environ["AWS_SECRET_ACCESS_KEY"] = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+        
+        # Now boto3 will automatically pick them up
+        s3 = boto3.client("s3")
+        print(s3.list_buckets())
+  
+  
