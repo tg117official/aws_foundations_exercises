@@ -1,0 +1,154 @@
+AWS_CLI_Installation_and_Listing_S3_Buckets_CLI:
+
+  Prerequisites:
+    1. Have an AWS account with S3 access
+    2. Create an IAM user with permissions (AmazonS3ReadOnlyAccess or AmazonS3FullAccess)
+    3. Keep Access Key ID & Secret Access Key ready
+
+  Installation:
+
+    Windows:
+      1. Download installer:
+           https://awscli.amazonaws.com/AWSCLIV2.msi
+      2. Run installer and complete setup wizard
+      3. Verify installation:
+           command: aws --version
+
+    Linux:
+      1. Download installer:
+           command: curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+      2. Unzip installer:
+           command: unzip awscliv2.zip
+      3. Install:
+           command: sudo ./aws/install
+      4. Verify installation:
+           command: aws --version
+
+    MacOS:
+      1. Using Homebrew:
+           command: brew install awscli
+      2. OR manual download:
+           command: curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+      3. Install:
+           command: sudo installer -pkg AWSCLIV2.pkg -target /
+      4. Verify installation:
+           command: aws --version
+
+    Alternative_Python_PIP_Method:
+      1. Ensure Python & pip are installed
+      2. Install AWS CLI v1 (⚠️ older version, not recommended for production):
+           command: pip install awscli --upgrade --user
+      3. Verify installation:
+           command: aws --version
+      4. Note: AWS recommends v2 installer, but pip works for practice.
+
+  Configure_Credentials:
+
+    Default_Profile:
+      1. Run:
+           command: aws configure
+      2. Provide:
+           - AWS Access Key ID
+           - AWS Secret Access Key
+           - Default region (e.g., us-east-1)
+           - Output format (json, text, or table)
+
+    Named_Profile:
+      1. Run:
+           command: aws configure --profile myprofile
+      2. Provide:
+           - AWS Access Key ID
+           - AWS Secret Access Key
+           - Default region (e.g., us-east-1)
+           - Output format (json, text, or table)
+      3. Stored in:
+           - ~/.aws/credentials
+           - ~/.aws/config
+
+  List_S3_Buckets:
+
+    Using_Default_Profile:
+      1. Run:
+           command: aws s3 ls
+      2. Expected Output:
+           - Creation date and bucket name for each S3 bucket
+           - Example:
+               2024-05-18 12:00:00 my-first-bucket
+               2024-07-02 08:45:00 project-data-bucket
+
+    Using_Named_Profile:
+      1. Run:
+           command: aws s3 ls --profile myprofile
+      2. Expected Output:
+           - Same as above, but under credentials of "myprofile"
+
+
+AWS_Access_Key_Configuration_and_Usage_for_programatic_access :
+
+  Configure_Access_Keys:
+
+    Windows:
+      - Open PowerShell or CMD.
+      - Run the following commands (replace with your actual keys):
+        - setx AWS_ACCESS_KEY_ID "AKIAxxxxxxxxxxxxxxx"
+        - setx AWS_SECRET_ACCESS_KEY "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        - setx AWS_DEFAULT_REGION "us-east-1"
+      - Close and reopen the terminal for changes to apply.
+
+    Linux_or_macOS:
+      - Open terminal.
+      - Export keys for the session:
+        - export AWS_ACCESS_KEY_ID="AKIAxxxxxxxxxxxxxxx"
+        - export AWS_SECRET_ACCESS_KEY="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        - export AWS_DEFAULT_REGION="us-east-1"
+      - To make permanent, add the above lines to ~/.bashrc, ~/.zshrc, or ~/.profile and reload.
+
+    AWS_CLI_Profile_Alternative:
+      - Configure a named profile using AWS CLI:
+        - aws configure --profile myprofile
+      - Enter:
+        - AWS Access Key ID
+        - AWS Secret Access Key
+        - Default region (e.g., us-east-1)
+      - Credentials are stored in:
+        - ~/.aws/credentials
+        - ~/.aws/config
+
+  Python_Usage:
+
+    Method_1_Environment_Variables:
+      description: boto3 automatically picks up credentials from environment variables.
+      code: |
+        import boto3
+        s3 = boto3.client("s3")
+        print(s3.list_buckets())
+
+    Method_2_Named_Profile:
+      description: Use a specific AWS CLI profile.
+      code: |
+        import boto3
+        session = boto3.session.Session(profile_name="myprofile")
+        s3 = session.client("s3")
+        print(s3.list_buckets())
+
+    Method_3_Explicit_Credentials:
+      description: Pass access keys directly in the script (not recommended for production).
+      code: |
+        import boto3
+        s3 = boto3.client(
+            "s3",
+            aws_access_key_id="AKIAxxxxxxxxxxxxxxx",
+            aws_secret_access_key="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            region_name="us-east-1"
+        )
+        print(s3.list_buckets())
+
+    Method_4_Shared_Credentials_File:
+      description: boto3 automatically loads from ~/.aws/credentials if profile is set.
+      code: |
+        import boto3
+        import os
+        session = boto3.session.Session(profile_name=os.getenv("AWS_PROFILE", "default"))
+        s3 = session.client("s3")
+        print(s3.list_buckets())
+
