@@ -1,0 +1,60 @@
+Steps (with commands)
+1. Create a trust policy (JSON file)
+This tells AWS that EC2 is trusted to assume this role. Save the following JSON as trust-policy.json:
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "ec2.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+
+
+2. Create the IAM role
+aws iam create-role \
+  --role-name EC2S3AccessRole \
+  --assume-role-policy-document file://trust-policy.json
+
+
+3. Attach the S3 Full Access policy to the role
+aws iam attach-role-policy \
+  --role-name EC2S3AccessRole \
+  --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess
+
+
+4. Create an Instance Profile (required for EC2)
+Roles need an instance profile to be attached to an EC2 instance.
+aws iam create-instance-profile \
+  --instance-profile-name EC2S3AccessProfile
+
+
+5. Add the role to the instance profile
+aws iam add-role-to-instance-profile \
+  --instance-profile-name EC2S3AccessProfile \
+  --role-name EC2S3AccessRole
+
+
+6. Attach the instance profile to your EC2 instance
+Replace <your-instance-id> with your EC2 ID:
+aws ec2 associate-iam-instance-profile \
+  --instance-id <your-instance-id> \
+  --iam-instance-profile Name=EC2S3AccessProfile
+
+Done!
+Now your EC2 instance can directly use AWS CLI or SDK calls (without access keys) to access S3.
+Example (inside EC2):
+aws s3 ls
+
+It should list your buckets 
+
+Notes:
+Use AmazonS3ReadOnlyAccess instead of AmazonS3FullAccess in production (better security).
+
+
+If EC2 already had a role, you may need disassociate-iam-instance-profile before attaching a new one.
+IAM changes can take a few seconds to propagate.
