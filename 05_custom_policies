@@ -1,0 +1,165 @@
+
+1) Read-only access to one S3 bucket
+Only list the bucket and get objects; no write/delete.
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListThisBucket",
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket"],
+      "Resource": "arn:aws:s3:::my-bucket"
+    },
+    {
+      "Sid": "ReadObjectsOnly",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": "arn:aws:s3:::my-bucket/*"
+    }
+  ]
+}
+
+
+2) Full access to a specific folder (prefix) in a bucket
+Read/write only under reports/. Listing is limited to that prefix.
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListOnlyReportsPrefix",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::my-bucket",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": "reports/*"
+        }
+      }
+    },
+    {
+      "Sid": "FullAccessWithinReportsPrefix",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::my-bucket/reports/*"
+    }
+  ]
+}
+
+
+3) Allow upload/download everywhere, but deny all deletes
+(Explicit Deny wins over any Allow.)
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowPutAndGetEverywhere",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Resource": "arn:aws:s3:::*/*"
+    },
+    {
+      "Sid": "DenyAllDeletes",
+      "Effect": "Deny",
+      "Action": [
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion"
+      ],
+      "Resource": "arn:aws:s3:::*/*"
+    }
+  ]
+}
+
+
+4) Start/Stop EC2 only in ap-south-1
+(Allow describes globally for console/CLI usability.)
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DescribeEverywhere",
+      "Effect": "Allow",
+      "Action": ["ec2:Describe*"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "StartStopOnlyInMumbai",
+      "Effect": "Allow",
+      "Action": ["ec2:StartInstances", "ec2:StopInstances"],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "ap-south-1"
+        }
+      }
+    }
+  ]
+}
+
+
+5) Allow S3 only from corporate IP (e.g., 203.0.113.25/32)
+Two statements: Allow when from office IP, and a safety Deny when not.
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowS3FromCorpIP",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": ["arn:aws:s3:::*", "arn:aws:s3:::*/*"],
+      "Condition": {
+        "IpAddress": {
+          "aws:SourceIp": "203.0.113.25/32"
+        }
+      }
+    },
+    {
+      "Sid": "DenyS3IfNotCorpIP",
+      "Effect": "Deny",
+      "Action": "s3:*",
+      "Resource": ["arn:aws:s3:::*", "arn:aws:s3:::*/*"],
+      "Condition": {
+        "NotIpAddress": {
+          "aws:SourceIp": "203.0.113.25/32"
+        }
+      }
+    }
+  ]
+}
+
+Note: aws:SourceIp applies to requests coming in over public endpoints. If you also use VPC endpoints, consider adding a VPC-endpoint condition (s3:aws:sourceVpce) instead/alongside.
+
+6) Require MFA to terminate EC2 instances
+User can do EC2 normally, but termination requires MFA.
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyTerminateWithoutMFA",
+      "Effect": "Deny",
+      "Action": "ec2:TerminateInstances",
+      "Resource": "*",
+      "Condition": {
+        "BoolIfExists": {
+          "aws:MultiFactorAuthPresent": "false"
+        }
+      }
+    }
+  ]
+}
+
+
+CLI helpers
+Create a customer-managed policy:
+aws iam create-policy \
+  --policy-name S3ReadOnly_MyBucket \
+  --policy-document file://s3-readonly-mybucket.json
+
+Attach to a user/role:
+aws iam attach-user-policy --user-name DemoUser --policy-arn arn:aws:iam::<ACCOUNT_ID>:policy/S3ReadOnly_MyBucket
+# or
+aws iam attach-role-policy --role-name DemoRole --policy-arn arn:aws:iam::<ACCOUNT_ID>:policy/S3ReadOnly_MyBucket
+
