@@ -1,0 +1,44 @@
+[
+  {
+    "order_id": "O1001",
+    "customer_id": "1",
+    "items": [
+      {"sku": "P001", "qty": 2},
+      {"sku": "P002", "qty": 1}
+    ],
+    "ship": {"city": "Mumbai", "pin": "400001"}
+  },
+  {
+    "order_id": "O1002",
+    "customer_id": "2",
+    "items": [
+      {"sku": "P003", "qty": 5}
+    ],
+    "ship": {"city": "Pune", "pin": "411001"}
+  },
+  {
+    "order_id": "O1003",
+    "customer_id": "3",
+    "items": [
+      {"sku": "P004", "qty": 1},
+      {"sku": "P005", "qty": 3}
+    ],
+    "ship": {"city": "Delhi", "pin": "110001"}
+  },
+  {
+    "order_id": "O1004",
+    "customer_id": "4",
+    "items": [
+      {"sku": "P006", "qty": 2}
+    ],
+    "ship": {"city": "Chennai", "pin": "600001"}
+  },
+  {
+    "order_id": "O1005",
+    "customer_id": "5",
+    "items": [
+      {"sku": "P007", "qty": 10}
+    ],
+    "ship": {"city": "Bangalore", "pin": "560001"}
+  }
+]

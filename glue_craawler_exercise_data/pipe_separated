@@ -1,0 +1,6 @@
+user_id|ts|url|ref
+U001|2025-09-10T10:00:00|/home|google.com
+U002|2025-09-10T10:01:00|/products|facebook.com
+U003|2025-09-10T10:02:00|/cart|direct
+U004|2025-09-10T10:03:00|/checkout|twitter.com
+U005|2025-09-10T10:04:00|/order|linkedin.com

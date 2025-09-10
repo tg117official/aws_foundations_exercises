@@ -2,17 +2,18 @@ AWS_CLI_Installation_and_Listing_S3_Buckets_CLI:
 
   Prerequisites:
     1. Have an AWS account with S3 access
-    2. Create an IAM user with permissions (AmazonS3ReadOnlyAccess or AmazonS3FullAccess)
+    2. Create an IAM user with permissions
+    (AmazonS3ReadOnlyAccess or AmazonS3FullAccess)
     3. Keep Access Key ID & Secret Access Key ready
 
   Installation:
 
     Windows:
-      1. Download installer:
-           https://awscli.amazonaws.com/AWSCLIV2.msi
-      2. Run installer and complete setup wizard
-      3. Verify installation:
-           command: aws --version
+      1: Download installer
+        command : https://awscli.amazonaws.com/AWSCLIV2.msi
+      2: Run installer and complete setup wizard
+      3: Verify installation:
+        command: aws --version
 
     Linux:
       1. Download installer:

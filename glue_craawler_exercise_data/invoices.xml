@@ -1,0 +1,32 @@
+<invoices>
+  <invoice>
+    <id>INV001</id>
+    <date>2025-09-01</date>
+    <customer>Alice Johnson</customer>
+    <amount>250.75</amount>
+  </invoice>
+  <invoice>
+    <id>INV002</id>
+    <date>2025-09-02</date>
+    <customer>Bob Smith</customer>
+    <amount>100.00</amount>
+  </invoice>
+  <invoice>
+    <id>INV003</id>
+    <date>2025-09-03</date>
+    <customer>Charlie Lee</customer>
+    <amount>450.50</amount>
+  </invoice>
+  <invoice>
+    <id>INV004</id>
+    <date>2025-09-04</date>
+    <customer>Diana Patel</customer>
+    <amount>300.25</amount>
+  </invoice>
+  <invoice>
+    <id>INV005</id>
+    <date>2025-09-05</date>
+    <customer>Edward Brown</customer>
+    <amount>600.00</amount>
+  </invoice>
+</invoices>
