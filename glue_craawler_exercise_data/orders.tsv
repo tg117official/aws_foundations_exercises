@@ -1,0 +1,8 @@
+order_id	customer_id	sku	qty	ship_city	ship_pin
+O1001	1	P001	2	Mumbai	400001
+O1001	1	P002	1	Mumbai	400001
+O1002	2	P003	5	Pune	411001
+O1003	3	P004	1	Delhi	110001
+O1003	3	P005	3	Delhi	110001
+O1004	4	P006	2	Chennai	600001
+O1005	5	P007	10	Bangalore	560001
