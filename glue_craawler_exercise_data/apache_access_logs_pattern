@@ -1,1 +1,0 @@
-%{IPV4:client_ip} - - \[%{HTTPDATE:timestamp}\] "%{WORD:method} %{URIPATH:uri}(?:%{URIPARAM:query_string})? HTTP/%{NUMBER:http_version}" %{NUMBER:status_code:int} %{NUMBER:bytes:int}

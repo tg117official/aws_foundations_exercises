@@ -1,0 +1,6 @@
+order_id,customer_id,order_date,amount,city
+GJ001,C006,2025-09-01,2100,Ahmedabad
+GJ002,C007,2025-09-02,1900,Surat
+GJ003,C008,2025-09-03,2500,Vadodara
+GJ004,C009,2025-09-04,3000,Rajkot
+GJ005,C010,2025-09-05,2800,Bhavnagar

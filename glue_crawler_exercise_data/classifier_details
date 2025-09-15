@@ -1,0 +1,13 @@
+
+apache_access_logs_pattern :
+%{IPV4:client_ip} - - \[%{HTTPDATE:timestamp}\] "%{WORD:method} %{URIPATH:uri}(?:%{URIPARAM:query_string})? HTTP/%{NUMBER:http_version}" %{NUMBER:status_code:int} %{NUMBER:bytes:int}
+
+Multiline JSON :
+ - JSON Classifier
+ - Name: orders_array_classifier
+ - JSONPath: "$[*]"
+   (means “all elements of the root array” are rows)
+
+Classifier Type  : XML
+ - Row tag: invoice
+ - (this tells Glue “each <invoice> element is one row”)
