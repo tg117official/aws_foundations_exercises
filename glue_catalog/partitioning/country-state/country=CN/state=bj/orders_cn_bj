@@ -1,0 +1,6 @@
+order_id,customer_id,order_date,amount,city
+CNBJ001,C116,2025-09-01,4100,Beijing
+CNBJ002,C117,2025-09-02,3600,Beijing
+CNBJ003,C118,2025-09-03,2800,Beijing
+CNBJ004,C119,2025-09-04,3900,Beijing
+CNBJ005,C120,2025-09-05,4200,Beijing

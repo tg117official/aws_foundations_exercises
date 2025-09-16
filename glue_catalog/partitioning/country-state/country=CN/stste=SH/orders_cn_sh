@@ -1,0 +1,6 @@
+order_id,customer_id,order_date,amount,city
+CNSH001,C121,2025-09-01,4300,Shanghai
+CNSH002,C122,2025-09-02,3100,Shanghai
+CNSH003,C123,2025-09-03,3600,Shanghai
+CNSH004,C124,2025-09-04,2900,Shanghai
+CNSH005,C125,2025-09-05,4000,Shanghai

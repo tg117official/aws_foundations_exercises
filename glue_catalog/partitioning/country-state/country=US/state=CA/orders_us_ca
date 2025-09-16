@@ -1,0 +1,6 @@
+order_id,customer_id,order_date,amount,city
+USCA001,C101,2025-09-01,3200,Los Angeles
+USCA002,C102,2025-09-02,4500,San Francisco
+USCA003,C103,2025-09-03,2800,San Diego
+USCA004,C104,2025-09-04,3900,Sacramento
+USCA005,C105,2025-09-05,4100,San Jose

@@ -1,0 +1,6 @@
+order_id,customer_id,order_date,amount,city
+RJ001,C011,2025-09-01,1700,Jaipur
+RJ002,C012,2025-09-02,2600,Jodhpur
+RJ003,C013,2025-09-03,2400,Udaipur
+RJ004,C014,2025-09-04,2200,Kota
+RJ005,C015,2025-09-05,1950,Bikaner

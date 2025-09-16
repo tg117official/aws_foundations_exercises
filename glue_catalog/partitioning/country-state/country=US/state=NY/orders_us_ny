@@ -1,0 +1,6 @@
+order_id,customer_id,order_date,amount,city
+USNY001,C106,2025-09-01,5000,New York City
+USNY002,C107,2025-09-02,3500,Buffalo
+USNY003,C108,2025-09-03,2700,Albany
+USNY004,C109,2025-09-04,4200,Rochester
+USNY005,C110,2025-09-05,3100,Syracuse

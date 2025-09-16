@@ -1,0 +1,6 @@
+order_id,customer_id,order_date,amount,city
+USTX001,C111,2025-09-01,2900,Houston
+USTX002,C112,2025-09-02,3300,Dallas
+USTX003,C113,2025-09-03,2500,Austin
+USTX004,C114,2025-09-04,3700,San Antonio
+USTX005,C115,2025-09-05,3400,Fort Worth

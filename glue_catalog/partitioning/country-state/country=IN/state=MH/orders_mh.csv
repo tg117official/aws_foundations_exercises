@@ -1,0 +1,6 @@
+order_id,customer_id,order_date,amount,city
+MH001,C001,2025-09-01,2500,Mumbai
+MH002,C002,2025-09-02,1800,Pune
+MH003,C003,2025-09-03,3200,Nagpur
+MH004,C004,2025-09-04,1500,Nashik
+MH005,C005,2025-09-05,2750,Thane

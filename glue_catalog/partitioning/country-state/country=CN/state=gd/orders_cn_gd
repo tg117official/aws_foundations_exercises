@@ -1,0 +1,6 @@
+order_id,customer_id,order_date,amount,city
+CNGD001,C126,2025-09-01,2700,Guangzhou
+CNGD002,C127,2025-09-02,3500,Shenzhen
+CNGD003,C128,2025-09-03,3000,Dongguan
+CNGD004,C129,2025-09-04,2800,Foshan
+CNGD005,C130,2025-09-05,3700,Zhuhai
