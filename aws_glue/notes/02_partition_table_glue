@@ -24,7 +24,7 @@ TBLPROPERTIES ('skip.header.line.count'='1');
 CREATE EXTERNAL TABLE IF NOT EXISTS de_demo.orders_by_country_state (
   order_id      string,
   customer_id   string,
-  order_date    strinf,
+  order_date    string,
   amount        double,
   city          string
 )
