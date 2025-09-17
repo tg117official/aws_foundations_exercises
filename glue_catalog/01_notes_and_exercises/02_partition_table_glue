@@ -1,0 +1,115 @@
+-- ===================================================
+-- EXERCISE 1: Create table partitioned only on state
+-- ===================================================
+CREATE EXTERNAL TABLE IF NOT EXISTS de_demo.orders_by_state (
+  order_id      string,
+  customer_id   string,
+  order_date    string,
+  amount        double,
+  city          string
+)
+PARTITIONED BY (state string)
+ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+WITH SERDEPROPERTIES ('field.delim' = ',')
+LOCATION 's3://my-bucket/orders_by_state/'
+TBLPROPERTIES ('skip.header.line.count'='1');
+
+-- Solution: Defines a table where folders are like:
+-- s3://my-bucket/orders_by_state/state=AP/part-000.csv
+
+
+-- ===================================================
+-- EXERCISE 2: Create table partitioned by country + state
+-- ===================================================
+CREATE EXTERNAL TABLE IF NOT EXISTS de_demo.orders_by_country_state (
+  order_id      string,
+  customer_id   string,
+  order_date    strinf,
+  amount        double,
+  city          string
+)
+PARTITIONED BY (country string, state string)
+ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+WITH SERDEPROPERTIES ('field.delim' = ',')
+LOCATION 's3://my-bucket/orders_by_country_state/'
+TBLPROPERTIES ('skip.header.line.count'='1');
+
+-- Solution: Defines a table where folders are like:
+-- s3://my-bucket/orders_by_country_state/country=IN/state=AP/part-000.csv
+
+
+-- ===================================================
+-- EXERCISE 3: Add a partition manually (state only table)
+-- ===================================================
+ALTER TABLE de_demo.orders_by_state
+ADD PARTITION (state='AP')
+LOCATION 's3://my-bucket/orders_by_state/state=AP/';
+
+-- Solution: Registers AP partition manually.
+
+
+-- ===================================================
+-- EXERCISE 4: Add a partition manually (country + state table)
+-- ===================================================
+ALTER TABLE de_demo.orders_by_country_state
+ADD PARTITION (country='IN', state='AP')
+LOCATION 's3://my-bucket/orders_by_country_state/country=IN/state=AP/';
+
+-- Solution: Registers India–Andhra Pradesh partition manually.
+
+
+-- ===================================================
+-- EXERCISE 5: Use MSCK to auto-discover partitions
+-- ===================================================
+MSCK REPAIR TABLE de_demo.orders_by_state;
+MSCK REPAIR TABLE de_demo.orders_by_country_state;
+
+-- Solution: Scans S3 Hive-style folders and auto-registers partitions.
+
+
+-- ===================================================
+-- EXERCISE 6: Alter table – rename a column
+-- ===================================================
+ALTER TABLE de_demo.orders_by_state
+RENAME COLUMN city TO city_name;
+
+-- Solution: Updates column name in metadata.
+
+
+-- ===================================================
+-- EXERCISE 7: Alter table – add a new column
+-- ===================================================
+ALTER TABLE de_demo.orders_by_country_state
+ADD COLUMNS (payment_method string);
+
+-- Solution: Adds a new column, NULL for existing rows.
+
+
+-- ===================================================
+-- EXERCISE 8: Alter table – change column type
+-- ===================================================
+ALTER TABLE de_demo.orders_by_state
+CHANGE COLUMN amount amount string;
+
+-- Solution: Changes column datatype from double → string (metadata-only).
+
+
+-- ===================================================
+-- EXERCISE 9: Drop partitions
+-- ===================================================
+ALTER TABLE de_demo.orders_by_state
+DROP PARTITION (state='AP');
+
+ALTER TABLE de_demo.orders_by_country_state
+DROP PARTITION (country='IN', state='AP');
+
+-- Solution: Removes partition metadata (data in S3 remains untouched).
+
+
+-- ===================================================
+-- EXERCISE 10: Drop tables
+-- ===================================================
+DROP TABLE IF EXISTS de_demo.orders_by_state;
+DROP TABLE IF EXISTS de_demo.orders_by_country_state;
+
+-- Solution: Deletes metadata from Glue Catalog, does not delete S3 data.

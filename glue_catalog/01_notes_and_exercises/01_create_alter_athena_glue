@@ -1,0 +1,117 @@
+-- =========================================
+-- Exercise 1: Create a basic CSV-backed table
+-- =========================================
+CREATE EXTERNAL TABLE IF NOT EXISTS de_demo.orders_csv (
+  order_id      string,
+  customer_id   string,
+  order_date    string,
+  amount        double,
+  city          string
+)
+ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+WITH SERDEPROPERTIES ('field.delim' = ',')
+LOCATION 's3://my-bucket/raw/orders_csv/'
+TBLPROPERTIES ('skip.header.line.count'='1');
+
+-- Solution: Creates an external CSV table, ignores header, maps to Glue Catalog.
+
+
+-- =========================================
+-- Exercise 2: Create a Parquet table with partitions
+-- =========================================
+CREATE EXTERNAL TABLE IF NOT EXISTS de_demo.orders_parquet (
+  order_id      string,
+  customer_id   string,
+  order_date    date,
+  amount        double,
+  city          string
+)
+PARTITIONED BY (country string, state string)
+STORED AS PARQUET
+LOCATION 's3://my-bucket/curated/orders/';
+
+-- Solution: Creates partitioned table, ready for MSCK REPAIR or ADD PARTITION.
+
+
+-- =========================================
+-- Exercise 3: Add partitions manually
+-- =========================================
+ALTER TABLE de_demo.orders_parquet
+ADD PARTITION (country='IN', state='MH')
+LOCATION 's3://my-bucket/curated/orders/country=IN/state=MH/';
+
+ALTER TABLE de_demo.orders_parquet
+ADD PARTITION (country='US', state='CA')
+LOCATION 's3://my-bucket/curated/orders/country=US/state=CA/';
+
+-- Solution: Manually registers 2 partitions in Glue Catalog.
+
+
+-- =========================================
+-- Exercise 4: Repair table to auto-add partitions
+-- =========================================
+MSCK REPAIR TABLE de_demo.orders_parquet;
+
+-- Solution: Discovers Hive-style folders (country=..., state=...) and registers them.
+
+
+-- =========================================
+-- Exercise 5: Rename a column
+-- =========================================
+ALTER TABLE de_demo.orders_csv
+RENAME COLUMN city TO city_name;
+
+-- Solution: Updates metadata in Glue Catalog, data untouched.
+
+
+-- =========================================
+-- Exercise 6: Change column datatype
+-- =========================================
+ALTER TABLE de_demo.orders_csv
+CHANGE COLUMN order_date order_date string;
+
+-- Solution: Changes type from date → string. Metadata-only change.
+
+
+-- =========================================
+-- Exercise 7: Add a new column
+-- =========================================
+ALTER TABLE de_demo.orders_csv
+ADD COLUMNS (payment_method string);
+
+-- Solution: Adds a new column, NULL for existing rows.
+
+
+-- =========================================
+-- Exercise 8: Drop a column (Athena limitation)
+-- =========================================
+-- Athena doesn’t support DROP COLUMN directly.
+-- Workaround: Create a new table without the column using CTAS.
+
+CREATE TABLE de_demo.orders_csv_v2
+WITH (
+  format = 'Parquet',
+  external_location = 's3://my-bucket/curated/orders_v2/'
+) AS
+SELECT order_id, customer_id, order_date, amount
+FROM de_demo.orders_csv;
+
+-- Solution: New table without the dropped column.
+
+
+-- =========================================
+-- Exercise 9: Describe table schema
+-- =========================================
+DESCRIBE de_demo.orders_csv;
+
+DESCRIBE EXTENDED de_demo.orders_parquet;
+
+-- Solution: Shows column definitions and metadata from Glue Catalog.
+
+
+-- =========================================
+-- Exercise 10: Drop a table
+-- =========================================
+DROP TABLE IF EXISTS de_demo.orders_csv;
+
+-- Solution: Removes metadata from Glue Catalog only. S3 data remains intact.
