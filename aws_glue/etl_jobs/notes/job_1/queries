@@ -1,0 +1,43 @@
+-- Denormalized order facts with basic derivations
+SELECT
+  o.order_id,
+  o.order_date,
+  year(o.order_date)  AS order_year,
+  month(o.order_date) AS order_month,
+  o.customer_id,
+  upper(c.customer_name) AS customer_name,
+  upper(c.segment) AS segment,
+  c.country,
+  c.state,
+  c.city,
+  o.amount,
+  upper(o.currency) AS currency
+FROM orders o
+JOIN customers c
+  ON o.customer_id = c.customer_id;
+
+
+
+
+CREATE DATABASE IF NOT EXISTS de_demo;
+
+CREATE EXTERNAL TABLE IF NOT EXISTS de_demo.order_facts (
+  order_id       string,
+  order_date     date,
+  order_year     int,
+  order_month    int,
+  customer_id    string,
+  customer_name  string,
+  segment        string,
+  state          string,
+  city           string,
+  amount         double,
+  currency       string
+)
+PARTITIONED BY (
+  country string,
+  order_year int,
+  order_month int
+)
+STORED AS PARQUET
+LOCATION 's3://YOUR-BUCKET/curated/order_facts/';
