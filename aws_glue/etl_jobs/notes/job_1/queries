@@ -7,11 +7,11 @@ SELECT
   o.customer_id,
   upper(c.customer_name) AS customer_name,
   upper(c.segment) AS segment,
+  o.amount,
+  upper(o.currency) AS currency,
   c.country,
   c.state,
-  c.city,
-  o.amount,
-  upper(o.currency) AS currency
+  c.city
 FROM orders o
 JOIN customers c
   ON o.customer_id = c.customer_id;
@@ -29,15 +29,13 @@ CREATE EXTERNAL TABLE IF NOT EXISTS de_demo.order_facts (
   customer_id    string,
   customer_name  string,
   segment        string,
-  state          string,
-  city           string,
   amount         double,
   currency       string
 )
 PARTITIONED BY (
   country string,
-  order_year int,
-  order_month int
+  state string,
+  city string
 )
 STORED AS PARQUET
-LOCATION 's3://YOUR-BUCKET/curated/order_facts/';
+LOCATION 's3://glue-exercises-tg117/etl_jobs_exercises/retail_data/order_facts/';
