@@ -1,0 +1,132 @@
+import sys
+import logging
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
+from pyspark.context import SparkContext
+from awsglue.context import GlueContext
+from awsglue.job import Job
+from awsglue.transforms import ApplyMapping, ResolveChoice
+from awsglue.dynamicframe import DynamicFrame
+from awsglue.transforms import Map
+
+# --------------------------
+# Hard-coded paths (edit me)
+# --------------------------
+CUSTOMERS_PATH = "s3://YOUR-BUCKET/raw/customers/"   # CSV with header
+ORDERS_PATH    = "s3://YOUR-BUCKET/raw/orders/"      # NDJSON (one JSON object per line)
+DEST_PATH      = "s3://YOUR-BUCKET/curated/job1_output/"
+
+# --------------------------
+# Glue / Spark setup
+# --------------------------
+sc = SparkContext()
+glue_ctx = GlueContext(sc)
+spark = glue_ctx.spark_session
+job = Job(glue_ctx)
+job.init("job1-dynamicframes-demo", {})  # no args
+
+log = logging.getLogger("glue-job1-dyf")
+log.setLevel(logging.INFO)
+
+# Helpful Spark settings (safe defaults for demos)
+spark.conf.set("spark.sql.sources.partitionOverwriteMode", "dynamic")
+spark.conf.set("spark.sql.shuffle.partitions", "64")
+
+log.info(f"Using paths -> customers: {CUSTOMERS_PATH} | orders: {ORDERS_PATH} | dest: {DEST_PATH}")
+
+# --------------------------
+# 1) READ: DynamicFrames
+# --------------------------
+# Customers: CSV with header row
+customers_dyf = glue_ctx.create_dynamic_frame.from_options(
+    connection_type="s3",
+    connection_options={"paths": [CUSTOMERS_PATH]},
+    format="csv",
+    format_options={"withHeader": True}
+)
+
+# Orders: NDJSON (one JSON object per line)
+orders_dyf = glue_ctx.create_dynamic_frame.from_options(
+    connection_type="s3",
+    connection_options={"paths": [ORDERS_PATH]},
+    format="json",
+    format_options={"multiline": False}
+)
+
+# --------------------------
+# 2) CLEAN / CAST (DYF)
+# --------------------------
+# (A) Customers: trim/clean + add email_domain + upper(country)
+# For trimming/regex we’ll use Map.apply (record-level transform)
+def clean_customers(rec):
+    # DynamicRecord behaves like a dict
+    def g(k, default=None):  # safe getter
+        v = rec.get(k)
+        return v if v is not None else default
+
+    name  = g("customer_name", "")
+    phone = g("phone", "")
+    email = g("email", "")
+    country = g("country", "")
+
+    rec["customer_name"] = name.strip()
+    rec["phone"] = "".join(str(phone).split())  # remove whitespace
+    rec["country"] = str(country).upper()
+    if email and "@" in email:
+        rec["email_domain"] = email.split("@")[-1]
+    else:
+        rec["email_domain"] = None
+    return rec
+
+customers_clean_dyf = Map.apply(frame=customers_dyf, f=clean_customers)
+
+# Type/field mapping with ApplyMapping (keeps schema tidy)
+customers_mapped_dyf = ApplyMapping.apply(
+    frame=customers_clean_dyf,
+    mappings=[
+        ("customer_id", "string", "customer_id", "string"),
+        ("customer_name", "string", "customer_name", "string"),
+        ("email", "string", "email", "string"),
+        ("phone", "string", "phone", "string"),
+        ("country", "string", "country", "string"),
+        ("email_domain", "string", "email_domain", "string"),
+    ],
+)
+
+# (B) Orders: cast amount/date, upper(currency), derive order_year/month
+# For date/upper/derivations, easiest is to convert to DF -> transform -> back to DYF
+orders_df = orders_dyf.toDF()
+orders_df = (
+    orders_df
+      .withColumn("order_date", F.to_date("order_date", "yyyy-MM-dd"))
+      .withColumn("amount", F.col("amount").cast(T.DoubleType()))
+      .withColumn("currency", F.upper(F.col("currency")))
+      .withColumn("order_year", F.year("order_date"))
+      .withColumn("order_month", F.month("order_date"))
+)
+
+orders_clean_dyf = DynamicFrame.fromDF(orders_df, glue_ctx, "orders_clean_dyf")
+
+# Resolve any ambiguous types just in case (safe no-op if clean)
+orders_clean_dyf = ResolveChoice.apply(frame=orders_clean_dyf, choice="make_struct")
+
+# --------------------------
+# 3) WRITE: Parquet to S3
+# --------------------------
+glue_ctx.write_dynamic_frame.from_options(
+    frame=customers_mapped_dyf,
+    connection_type="s3",
+    connection_options={"path": f"{DEST_PATH}/customers/"},
+    format="parquet"
+)
+
+glue_ctx.write_dynamic_frame.from_options(
+    frame=orders_clean_dyf,
+    connection_type="s3",
+    connection_options={"path": f"{DEST_PATH}/orders/"},
+    format="parquet"
+)
+
+log.info(f"Wrote cleaned DynamicFrames to {DEST_PATH}")
+
+job.commit()

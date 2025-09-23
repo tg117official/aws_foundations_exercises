@@ -1,0 +1,11 @@
+customer_id,customer_name,email,phone,country,state,city,segment
+C001,Alice Johnson,alice.johnson@example.com,9876543210,IN,MH,Mumbai,Retail
+C002,Bob Smith,bob.smith@example.com,9123456789,IN,AP,Vizag,Retail
+C003,Charlie Lee,charlie.lee@example.com,8001234567,US,CA,San Francisco,SMB
+C004,Diana Patel,diana.patel@example.com,7009876543,US,NY,New York,Enterprise
+C005,Edward Brown,edward.brown@example.com,6001112233,US,TX,Austin,SMB
+C006,Farah Khan,farah.khan@example.com,9876501234,IN,GJ,Ahmedabad,Retail
+C007,George Li,george.li@example.com,5556667777,CN,SH,Shanghai,Enterprise
+C008,Helen Zhao,helen.zhao@example.com,4445556666,CN,GD,Shenzhen,SMB
+C009,Ian Wright,ian.wright@example.com,3332221111,US,CA,Los Angeles,Retail
+C010,Juhi Mehra,juhi.mehra@example.com,2223334444,IN,RJ,Jaipur,Enterprise

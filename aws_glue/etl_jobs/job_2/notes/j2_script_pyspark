@@ -1,0 +1,49 @@
+import sys
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
+from awsglue.context import GlueContext
+from awsglue.utils import getResolvedOptions
+from pyspark.context import SparkContext
+
+args = getResolvedOptions(sys.argv, ["JOB_NAME"])
+sc = SparkContext()
+glueContext = GlueContext(sc)
+spark = glueContext.spark_session
+
+
+# Input paths
+customers_path = f"s3://glue-exercises-tg117/etl_jobs_exercises/job_2/datasets/raw/customers/"
+orders_path    = f"s3://glue-exercises-tg117/etl_jobs_exercises/job_2/datasets/raw/orders/"
+dest_path      = f"s3://glue-exercises-tg117/etl_jobs_exercises/job_2/datasets/curated/"
+
+# 1. Read raw
+customers = (spark.read.option("header", "true").csv(customers_path))
+orders = (spark.read.json(orders_path))  # NDJSON format
+
+# 2. Transform customers
+customers_clean = (customers
+    .withColumn("customer_name", F.trim("customer_name"))
+    .withColumn("phone", F.regexp_replace(F.col("phone"), "\\s+", ""))
+    .withColumn("country", F.upper("country"))
+    .withColumn("email_domain", F.split("email", "@")[1])
+)
+
+# 3. Transform orders
+orders_clean = (orders
+    .withColumn("order_date", F.to_date("order_date", "yyyy-MM-dd"))
+    .withColumn("amount", F.col("amount").cast(T.DoubleType()))
+    .withColumn("currency", F.upper("currency"))
+    .withColumn("order_year", F.year("order_date"))
+    .withColumn("order_month", F.month("order_date"))
+)
+
+# 4. Write outputs (Parquet)
+(customers_clean.coalesce(1).
+    .write.mode("overwrite")
+    .parquet(f"{dest_path}/customers/"))
+
+(orders_clean
+    .write.mode("overwrite").coalesce(1).
+    .parquet(f"{dest_path}/orders/"))
+
+print(f"Wrote cleaned customers & orders to {dest_path}")

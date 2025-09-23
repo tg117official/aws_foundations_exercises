@@ -1,0 +1,10 @@
+{"order_id":"O1001","customer_id":"C001","order_date":"2025-09-01","amount":"2500.50","currency":"inr"}
+{"order_id":"O1002","customer_id":"C002","order_date":"2025-09-02","amount":"1800","currency":"INR"}
+{"order_id":"O1003","customer_id":"C003","order_date":"2025-09-03","amount":"420.75","currency":"usd"}
+{"order_id":"O1004","customer_id":"C004","order_date":"2025-09-03","amount":"1550","currency":"USD"}
+{"order_id":"O1005","customer_id":"C005","order_date":"2025-09-04","amount":"800","currency":"USD"}
+{"order_id":"O1006","customer_id":"C006","order_date":"2025-09-04","amount":"2200","currency":"inr"}
+{"order_id":"O1007","customer_id":"C007","order_date":"2025-09-05","amount":"3600.99","currency":"cny"}
+{"order_id":"O1008","customer_id":"C008","order_date":"2025-09-05","amount":"2900","currency":"CNY"}
+{"order_id":"O1009","customer_id":"C009","order_date":"2025-09-06","amount":"1250","currency":"USD"}
+{"order_id":"O1010","customer_id":"C010","order_date":"2025-09-07","amount":"3100","currency":"inr"}

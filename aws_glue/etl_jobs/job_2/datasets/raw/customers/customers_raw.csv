@@ -1,0 +1,11 @@
+customer_id,customer_name,email,phone,country
+C001, Alice Johnson ,alice.johnson@example.com,  9876543210 ,IN
+C002,Bob Smith,bob.smith@example.com,9123456789,IN
+C003,Charlie Lee,charlie.lee@example.com,  8001234567,US
+C004,Diana Patel,diana.patel@example.com,7009876543,US
+C005,Edward Brown,edward.brown@example.com,6001112233,US
+C006, Farah Khan ,farah.khan@example.com,  9876501234 ,IN
+C007,George Li,george.li@example.com,  5556667777 ,CN
+C008,Helen Zhao,helen.zhao@example.com,4445556666,CN
+C009,Ian Wright,ian.wright@example.com,3332221111,US
+C010,Juhi Mehra,juhi.mehra@example.com,2223334444,IN
