@@ -1,0 +1,332 @@
+-- ==========================================
+-- AWS Redshift: CRUD Exercises with Solutions
+-- ==========================================
+-- Notes:
+-- * Primary/Unique constraints in Redshift are informational (not enforced).
+-- * Prefer RA3 node types; compression/encoding is auto-optimized by Redshift.
+-- * Use MERGE for UPSERT patterns (Redshift supports MERGE).
+
+-- ------------------------------------------
+-- 0) Housekeeping
+-- ------------------------------------------
+DROP SCHEMA IF EXISTS training CASCADE;
+CREATE SCHEMA training;
+SET search_path TO training;
+
+-- ==========================================
+-- EXERCISE 1: Create tables (D)efine schema
+-- Goal: Create dimension and fact tables with DISTKEY / SORTKEY
+-- ==========================================
+-- --------- SOLUTION ----------
+-- Customers (dimension)
+CREATE TABLE customers (
+  customer_id   INT IDENTITY(1,1),
+  first_name    VARCHAR(50),
+  last_name     VARCHAR(50),
+  email         VARCHAR(120),
+  city          VARCHAR(80),
+  state         VARCHAR(80),
+  created_at    TIMESTAMP DEFAULT getdate(),
+  PRIMARY KEY(customer_id)
+)
+DISTSTYLE AUTO
+SORTKEY (created_at);
+
+-- Products (dimension)
+CREATE TABLE products (
+  product_id    INT IDENTITY(1,1),
+  product_name  VARCHAR(120),
+  category      VARCHAR(80),
+  price         DECIMAL(10,2) NOT NULL,
+  is_active     BOOLEAN DEFAULT TRUE,
+  PRIMARY KEY(product_id)
+)
+DISTSTYLE AUTO
+SORTKEY (category);
+
+-- Orders (fact)
+CREATE TABLE orders (
+  order_id      INT IDENTITY(1001,1),
+  customer_id   INT NOT NULL,
+  product_id    INT NOT NULL,
+  order_date    DATE NOT NULL,
+  quantity      INT NOT NULL DEFAULT 1,
+  unit_price    DECIMAL(10,2) NOT NULL,
+  amount        DECIMAL(12,2) NOT NULL,
+  status        VARCHAR(20) DEFAULT 'PLACED',  -- PLACED|PAID|SHIPPED|CANCELED
+  PRIMARY KEY(order_id)
+)
+-- collocate facts by customer to reduce shuffle in some joins
+DISTKEY (customer_id)
+SORTKEY (order_date);
+
+-- ==========================================
+-- EXERCISE 2: C = CREATE (INSERT rows)
+-- Goal: Insert sample seed data into all tables
+-- ==========================================
+-- --------- SOLUTION ----------
+INSERT INTO customers (first_name, last_name, email, city, state) VALUES
+('Asha',  'Kulkarni', 'asha.k@example.com',  'Pune',     'MH'),
+('Ravi',  'Iyer',     'ravi.i@example.com',  'Mumbai',   'MH'),
+('Neha',  'Sharma',   'neha.s@example.com',  'Indore',   'MP'),
+('Kabir', 'Verma',    'kabir.v@example.com', 'Jaipur',   'RJ'),
+('Sara',  'Khan',     'sara.k@example.com',  'Bengaluru','KA');
+
+INSERT INTO products (product_name, category, price) VALUES
+('Mechanical Keyboard', 'Electronics', 4999.00),
+('Noise-Cancelling Headphones', 'Electronics', 14999.00),
+('Standing Desk', 'Furniture', 18999.00),
+('Ergo Chair', 'Furniture', 12999.00),
+('USB-C Hub 7-in-1', 'Accessories', 2999.00);
+
+-- A few orders (assume current prices used as unit_price)
+INSERT INTO orders (customer_id, product_id, order_date, quantity, unit_price, amount, status)
+SELECT c.customer_id, p.product_id, DATE '2025-10-08', 1, p.price, p.price * 1, 'PLACED'
+FROM customers c
+JOIN products p ON p.product_name IN ('Mechanical Keyboard')
+WHERE c.first_name IN ('Asha','Ravi');
+
+INSERT INTO orders (customer_id, product_id, order_date, quantity, unit_price, amount, status)
+SELECT c.customer_id, p.product_id, DATE '2025-10-09', 2, p.price, p.price * 2, 'PAID'
+FROM customers c
+JOIN products p ON p.product_name IN ('USB-C Hub 7-in-1')
+WHERE c.first_name IN ('Neha','Kabir');
+
+INSERT INTO orders (customer_id, product_id, order_date, quantity, unit_price, amount, status)
+SELECT c.customer_id, p.product_id, DATE '2025-10-10', 1, p.price, p.price * 1, 'SHIPPED'
+FROM customers c
+JOIN products p ON p.product_name IN ('Ergo Chair')
+WHERE c.first_name IN ('Sara');
+
+-- ==========================================
+-- EXERCISE 3: R = READ (SELECT basics)
+-- Goal: Query with filters, sorting, aggregates, window functions
+-- ==========================================
+-- --------- SOLUTION ----------
+-- 3.1) List all customers in Maharashtra (MH), sorted by first_name
+SELECT customer_id, first_name, last_name, email, city, state
+FROM customers
+WHERE state = 'MH'
+ORDER BY first_name;
+
+-- 3.2) Total sales amount by category (join fact + dim)
+SELECT p.category, SUM(o.amount) AS total_sales
+FROM orders o
+JOIN products p USING (product_id)
+GROUP BY p.category
+ORDER BY total_sales DESC;
+
+-- 3.3) Per-customer cumulative sales over time (window function)
+SELECT
+  o.customer_id,
+  c.first_name || ' ' || c.last_name AS customer_name,
+  o.order_date,
+  o.amount,
+  SUM(o.amount) OVER (
+    PARTITION BY o.customer_id
+    ORDER BY o.order_date
+    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+  ) AS running_total
+FROM orders o
+JOIN customers c USING (customer_id)
+ORDER BY o.customer_id, o.order_date;
+
+-- 3.4) Recent orders last 3 days (relative filter)
+SELECT *
+FROM orders
+WHERE order_date >= (CURRENT_DATE - 2)
+ORDER BY order_date DESC, order_id;
+
+-- ==========================================
+-- EXERCISE 4: U = UPDATE (single-row and bulk)
+-- Goal: Correct a user’s email; increase price for a category
+-- ==========================================
+-- --------- SOLUTION ----------
+-- 4.1) Fix typo in email for Ravi
+UPDATE customers
+SET email = 'ravi.iyer@example.com'
+WHERE first_name = 'Ravi' AND last_name = 'Iyer';
+
+-- 4.2) Bulk increase price by 5% for Furniture category (and keep two decimals)
+UPDATE products
+SET price = ROUND(price * 1.05, 2)
+WHERE category = 'Furniture';
+
+-- Verify
+SELECT product_id, product_name, category, price FROM products ORDER BY product_id;
+
+-- ==========================================
+-- EXERCISE 5: D = DELETE (hard delete) + Soft delete pattern
+-- Goal: Remove an inactive product; demonstrate soft delete
+-- ==========================================
+-- --------- SOLUTION ----------
+-- 5.1) Mark Accessories as inactive (soft delete style)
+UPDATE products
+SET is_active = FALSE
+WHERE category = 'Accessories';
+
+-- 5.2) Hard delete example (delete products with price < 3500 and inactive)
+DELETE FROM products
+WHERE is_active = FALSE AND price < 3500;
+
+-- Verify
+SELECT * FROM products ORDER BY product_id;
+
+-- ==========================================
+-- EXERCISE 6: UPSERT with MERGE
+-- Goal: Upsert incoming order changes (update qty/amount if exists, else insert)
+-- ==========================================
+-- --------- SOLUTION ----------
+-- Stage incoming changes with VALUES (could be from COPY in real life)
+-- Suppose: (customer_id, product_id, order_date, quantity, unit_price)
+WITH incoming AS (
+  SELECT * FROM (
+    VALUES
+      (1, 1, DATE '2025-10-10', 2, 4999.00), -- Asha buys 2 keyboards on 10th (update or insert)
+      (2, 4, DATE '2025-10-10', 1, 13649.00), -- Ravi buys 1 Ergo Chair (insert)
+      (5, 3, DATE '2025-10-09', 1, 19949.00)  -- Sara buys 1 Standing Desk (insert)
+  ) AS v(customer_id, product_id, order_date, quantity, unit_price)
+)
+-- Redshift MERGE requires a unique match key. We'll define a natural key:
+-- one order per (customer_id, product_id, order_date). If matched, update; else insert.
+MERGE INTO orders tgt
+USING incoming src
+  ON  tgt.customer_id = src.customer_id
+  AND tgt.product_id  = src.product_id
+  AND tgt.order_date  = src.order_date
+WHEN MATCHED THEN
+  UPDATE SET
+    quantity  = src.quantity,
+    unit_price= src.unit_price,
+    amount    = (src.quantity * src.unit_price),
+    status    = 'PAID'
+WHEN NOT MATCHED THEN
+  INSERT (customer_id, product_id, order_date, quantity, unit_price, amount, status)
+  VALUES (src.customer_id, src.product_id, src.order_date, src.quantity, src.unit_price, (src.quantity*src.unit_price), 'PLACED');
+
+-- Verify
+SELECT order_id, customer_id, product_id, order_date, quantity, unit_price, amount, status
+FROM orders
+ORDER BY order_date, order_id;
+
+-- ==========================================
+-- EXERCISE 7: Transactions (BEGIN/COMMIT/ROLLBACK)
+-- Goal: Demonstrate rollback vs commit
+-- ==========================================
+-- --------- SOLUTION ----------
+-- 7.1) ROLLBACK example
+BEGIN;
+  UPDATE orders
+  SET status = 'CANCELED'
+  WHERE order_date = DATE '2025-10-09' AND status IN ('PLACED','PAID','SHIPPED');
+  -- Check inside transaction (optional select)
+  -- SELECT order_id, status FROM orders WHERE order_date = DATE '2025-10-09';
+ROLLBACK;  -- revert
+
+-- 7.2) COMMIT example
+BEGIN;
+  UPDATE orders
+  SET status = 'SHIPPED'
+  WHERE order_date = DATE '2025-10-08' AND status = 'PLACED';
+COMMIT;
+
+-- Verify status after commit/rollback
+SELECT order_id, order_date, status
+FROM orders
+ORDER BY order_date, order_id;
+
+-- ==========================================
+-- EXERCISE 8: Temporary staging + Merge
+-- Goal: Use a TEMP table to stage deltas before upsert
+-- ==========================================
+-- --------- SOLUTION ----------
+CREATE TEMP TABLE stage_orders AS
+SELECT * FROM orders WHERE 1=0;  -- empty clone
+
+INSERT INTO stage_orders (customer_id, product_id, order_date, quantity, unit_price, amount, status)
+VALUES
+  (3, 5, DATE '2025-10-10', 3, 2999.00, 3*2999.00, 'PLACED'),   -- Neha buys hubs
+  (4, 1, DATE '2025-10-10', 1, 4999.00, 1*4999.00, 'PLACED');   -- Kabir buys keyboard
+
+MERGE INTO orders tgt
+USING stage_orders src
+  ON  tgt.customer_id = src.customer_id
+  AND tgt.product_id  = src.product_id
+  AND tgt.order_date  = src.order_date
+WHEN MATCHED THEN
+  UPDATE SET
+    quantity  = src.quantity,
+    unit_price= src.unit_price,
+    amount    = src.amount,
+    status    = 'PAID'
+WHEN NOT MATCHED THEN
+  INSERT (customer_id, product_id, order_date, quantity, unit_price, amount, status)
+  VALUES (src.customer_id, src.product_id, src.order_date, src.quantity, src.unit_price, src.amount, 'PLACED');
+
+-- Verify
+SELECT order_id, customer_id, product_id, order_date, quantity, unit_price, amount, status
+FROM orders
+ORDER BY order_date DESC, order_id;
+
+-- ==========================================
+-- EXERCISE 9: READ with a View
+-- Goal: Create a view for Top Customers in the last N days
+-- ==========================================
+-- --------- SOLUTION ----------
+DROP VIEW IF EXISTS v_top_customers_last7;
+CREATE VIEW v_top_customers_last7 AS
+SELECT
+  o.customer_id,
+  c.first_name || ' ' || c.last_name AS customer_name,
+  SUM(o.amount) AS sales_last7
+FROM orders o
+JOIN customers c USING (customer_id)
+WHERE o.order_date >= (CURRENT_DATE - 6)
+GROUP BY o.customer_id, customer_name
+ORDER BY sales_last7 DESC;
+
+-- Use the view
+SELECT * FROM v_top_customers_last7;
+
+-- ==========================================
+-- EXERCISE 10: Clean up options (TRUNCATE vs DELETE)
+-- Goal: Show difference between TRUNCATE and conditional DELETE
+-- ==========================================
+-- --------- SOLUTION ----------
+-- Keep dimension tables; just demonstrate on a copy of orders
+DROP TABLE IF EXISTS orders_sandbox;
+CREATE TABLE orders_sandbox AS SELECT * FROM orders;
+
+-- Conditional DELETE (slower for huge tables, keeps structure & identity)
+DELETE FROM orders_sandbox WHERE status = 'CANCELED';
+
+-- TRUNCATE (fast, removes all rows; preserves table definition)
+TRUNCATE TABLE orders_sandbox;
+
+-- Final checks (non-destructive)
+SELECT COUNT(*) AS orders_total FROM orders;
+SELECT COUNT(*) AS sandbox_total FROM orders_sandbox;
+
+-- ==========================================
+-- BONUS QUICK TESTS
+-- ==========================================
+-- Count orders per status
+SELECT status, COUNT(*) AS cnt, SUM(amount) AS total_amount
+FROM orders
+GROUP BY status
+ORDER BY cnt DESC;
+
+-- Join to see meaningful report
+SELECT
+  o.order_id,
+  o.order_date,
+  c.first_name || ' ' || c.last_name AS customer_name,
+  p.product_name,
+  o.quantity,
+  o.unit_price,
+  o.amount,
+  o.status
+FROM orders o
+JOIN customers c USING (customer_id)
+JOIN products p  USING (product_id)
+ORDER BY o.order_date DESC, o.order_id;
