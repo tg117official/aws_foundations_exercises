@@ -5,10 +5,10 @@ spark = SparkSession.builder.appName("job3-aggregate-summaries").getOrCreate()
 # ---------------------------
 # Hardcoded paths (edit)
 # ---------------------------
-products_path = "s3://your-bucket/curated/job3/products/"
-txns_path     = "s3://your-bucket/curated/job3/transactions/"
-daily_out     = "s3://your-bucket/curated/daily_sales/"
-monthly_out   = "s3://your-bucket/curated/monthly_sales/"
+products_path = "s3://glue-exercises-tg117/etl_jobs_exercises/job_4/datasets/products/"
+txns_path     = "s3://glue-exercises-tg117/etl_jobs_exercises/job_4/datasets/transactions/"
+daily_out     = "s3://glue-exercises-tg117/etl_jobs_exercises/job_4/datasets/curated/daily_products_transactions_aggregate/"
+monthly_out   = "s3://glue-exercises-tg117/etl_jobs_exercises/job_4/datasets/curated/monthly_products_transactions_aggregate/"
 
 # Helpful write configs
 spark.conf.set("spark.sql.sources.partitionOverwriteMode", "dynamic")

@@ -38,12 +38,12 @@ orders_clean = (orders
 )
 
 # 4. Write outputs (Parquet)
-(customers_clean.coalesce(1).
+(customers_clean.coalesce(1)
     .write.mode("overwrite")
     .parquet(f"{dest_path}/customers/"))
 
-(orders_clean
-    .write.mode("overwrite").coalesce(1).
+(orders_clean.coalesce(1)
+    .write.mode("overwrite")
     .parquet(f"{dest_path}/orders/"))
 
 print(f"Wrote cleaned customers & orders to {dest_path}")

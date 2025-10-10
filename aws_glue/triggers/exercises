@@ -1,0 +1,93 @@
+AWS Glue Trigger Exercises
+Exercise 1: On-demand Trigger
+Goal: Manually run a trigger that starts a single ETL job.
+
+
+Steps:
+
+Create a trigger named manual_trigger_job1.
+
+Attach it to Job 1 (Raw → Curated).
+
+Run the trigger manually from the console.
+
+Learning: Students see how triggers can decouple starting a job from running it directly.
+
+
+
+Exercise 2: Job-completion Trigger (chaining)
+Goal: Start Job 2 (Curated → Fact) only after Job 1 succeeds.
+
+Steps:
+
+Create trigger job1_to_job2_trigger.
+
+Type = Job-completion.
+
+Condition = Job 1 succeeded.
+
+Action = Start Job 2.
+
+Learning: Introduces dependency-based chaining.
+
+
+
+Exercise 3: Multiple downstream jobs
+Goal: Run two jobs in parallel when Job 2 finishes.
+
+Scenario: After fact table creation, we want both:
+
+Job 3 → Aggregated Summaries
+
+A separate Job → Data Quality Checks
+
+Steps:
+
+Create trigger job2_downstream_trigger.
+
+Condition = Job 2 succeeded.
+
+Actions = Start Job 3 and DQ Job.
+
+Learning: Shows fan-out pattern (one job → multiple downstream).
+
+
+
+Exercise 4: Scheduled Trigger
+Goal: Automate pipeline runs daily at 1 AM IST.
+
+Steps:
+
+Create trigger daily_pipeline_trigger.
+
+Type = Schedule.
+
+Cron = cron(30 19 * * ? *) (1:00 AM IST = 19:30 UTC).
+Attach to Job 1.
+
+Learning: Introduces time-based scheduling with cron expressions.
+
+
+
+Exercise 5: Conditional branching with Success/Failure
+Goal: Show different triggers for success vs failure of a job.
+
+Scenario:
+
+If Job 3 succeeds → send data to reporting job.
+If Job 3 fails → run an error-handling/notification job.
+
+Steps:
+
+Create trigger job3_success_trigger → condition: Job 3 success → action: Reporting Job.
+Create trigger job3_failure_trigger → condition: Job 3 failed → action: Notify Job.
+
+Learning: Teaches error handling pipelines with Glue triggers.
+
+
+
+
+
+
+
+
