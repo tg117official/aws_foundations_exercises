@@ -6,12 +6,16 @@
 -- * Prefer RA3 node types; compression/encoding is auto-optimized by Redshift.
 -- * Use MERGE for UPSERT patterns (Redshift supports MERGE).
 
+
+
 -- ------------------------------------------
 -- 0) Housekeeping
 -- ------------------------------------------
 DROP SCHEMA IF EXISTS training CASCADE;
 CREATE SCHEMA training;
 SET search_path TO training;
+
+
 
 -- ==========================================
 -- EXERCISE 1: Create tables (D)efine schema
@@ -60,6 +64,8 @@ CREATE TABLE orders (
 DISTKEY (customer_id)
 SORTKEY (order_date);
 
+
+
 -- ==========================================
 -- EXERCISE 2: C = CREATE (INSERT rows)
 -- Goal: Insert sample seed data into all tables
@@ -97,6 +103,8 @@ SELECT c.customer_id, p.product_id, DATE '2025-10-10', 1, p.price, p.price * 1, 
 FROM customers c
 JOIN products p ON p.product_name IN ('Ergo Chair')
 WHERE c.first_name IN ('Sara');
+
+
 
 -- ==========================================
 -- EXERCISE 3: R = READ (SELECT basics)
@@ -137,6 +145,8 @@ FROM orders
 WHERE order_date >= (CURRENT_DATE - 2)
 ORDER BY order_date DESC, order_id;
 
+
+
 -- ==========================================
 -- EXERCISE 4: U = UPDATE (single-row and bulk)
 -- Goal: Correct a user’s email; increase price for a category
@@ -155,6 +165,8 @@ WHERE category = 'Furniture';
 -- Verify
 SELECT product_id, product_name, category, price FROM products ORDER BY product_id;
 
+
+
 -- ==========================================
 -- EXERCISE 5: D = DELETE (hard delete) + Soft delete pattern
 -- Goal: Remove an inactive product; demonstrate soft delete
@@ -171,6 +183,8 @@ WHERE is_active = FALSE AND price < 3500;
 
 -- Verify
 SELECT * FROM products ORDER BY product_id;
+
+
 
 -- ==========================================
 -- EXERCISE 6: UPSERT with MERGE
@@ -209,6 +223,8 @@ SELECT order_id, customer_id, product_id, order_date, quantity, unit_price, amou
 FROM orders
 ORDER BY order_date, order_id;
 
+
+
 -- ==========================================
 -- EXERCISE 7: Transactions (BEGIN/COMMIT/ROLLBACK)
 -- Goal: Demonstrate rollback vs commit
@@ -234,6 +250,8 @@ COMMIT;
 SELECT order_id, order_date, status
 FROM orders
 ORDER BY order_date, order_id;
+
+
 
 -- ==========================================
 -- EXERCISE 8: Temporary staging + Merge
@@ -268,6 +286,8 @@ SELECT order_id, customer_id, product_id, order_date, quantity, unit_price, amou
 FROM orders
 ORDER BY order_date DESC, order_id;
 
+
+
 -- ==========================================
 -- EXERCISE 9: READ with a View
 -- Goal: Create a view for Top Customers in the last N days
@@ -288,6 +308,8 @@ ORDER BY sales_last7 DESC;
 -- Use the view
 SELECT * FROM v_top_customers_last7;
 
+
+
 -- ==========================================
 -- EXERCISE 10: Clean up options (TRUNCATE vs DELETE)
 -- Goal: Show difference between TRUNCATE and conditional DELETE
@@ -306,6 +328,8 @@ TRUNCATE TABLE orders_sandbox;
 -- Final checks (non-destructive)
 SELECT COUNT(*) AS orders_total FROM orders;
 SELECT COUNT(*) AS sandbox_total FROM orders_sandbox;
+
+
 
 -- ==========================================
 -- BONUS QUICK TESTS
