@@ -113,10 +113,6 @@ INSERT INTO fact_orders_even VALUES
 (20,20,20,'2025-10-10',2,14000.00);
 
 
-INSERT INTO fact_orders_prodkey SELECT * FROM fact_orders_even;
-
-
-
 -- 2C) KEY distribution on product_id – alternative co-location choice
 CREATE TABLE fact_orders_prodkey (
   order_id     INT,
@@ -141,14 +137,13 @@ ANALYZE;  -- keep stats fresh for sensible EXPLAINs
 -- ============================================================
 
 -- V1) At-a-glance table info: distribution, distkey, skew, size
-SELECT database, schema, "table", diststyle, distkey, skew_rows, size
+SELECT table_id, "table" , diststyle
 FROM svv_table_info
 WHERE schema = 'distkey_lab'
 ORDER BY "table";
 
 -- V2) Column-level flags: which column is distkey, sortkey order, encoding
-SELECT table_schema, table_name, column, ordinal_position,
-       distkey, sortkey, encoding
+SELECT *
 FROM svv_columns
 WHERE table_schema = 'distkey_lab'
 ORDER BY table_name, ordinal_position;
@@ -156,9 +151,9 @@ ORDER BY table_name, ordinal_position;
 -- V3) Per-slice storage to eyeball distribution (blocks by slice)
 -- (svv_diskusage exists on most clusters; if not, skip this check)
 SELECT
-  s.name      AS table_name,
+  "table"      AS table_name,
   d.slice,
-  SUM(d.blocks) AS blocks
+  SUM(d.blocknum) AS blocks
 FROM svv_diskusage d
 JOIN svv_table_info s ON s.table_id = d.tbl
 WHERE s.schema = 'distkey_lab'
@@ -300,20 +295,31 @@ INSERT INTO fact_orders_skewed VALUES
 
 ANALYZE fact_orders_skewed;
 
--- 5B) Check skew indicators
-SELECT database, schema, "table", diststyle, distkey, skew_rows, size
-FROM svv_table_info
-WHERE schema = 'distkey_lab' AND "table" = 'fact_orders_skewed';
 
--- 5C) Per-slice block counts – skewed table should show imbalance
+-- V1) At-a-glance table info: distribution, distkey, skew, size
+SELECT table_id, "table" , diststyle
+FROM svv_table_info
+WHERE schema = 'distkey_lab'
+ORDER BY "table";
+
+-- V2) Column-level flags: which column is distkey, sortkey order, encoding
+SELECT *
+FROM svv_columns
+WHERE table_schema = 'distkey_lab'
+ORDER BY table_name, ordinal_position;
+
+-- V3) Per-slice storage to eyeball distribution (blocks by slice)
+-- (svv_diskusage exists on most clusters; if not, skip this check)
 SELECT
+  "table"      AS table_name,
   d.slice,
-  SUM(d.blocks) AS blocks
+  SUM(d.blocknum) AS blocks
 FROM svv_diskusage d
 JOIN svv_table_info s ON s.table_id = d.tbl
-WHERE s.schema = 'distkey_lab' AND s."table" = 'fact_orders_skewed'
-GROUP BY 1
-ORDER BY 1;
+WHERE s.schema = 'distkey_lab'
+  AND s."table" IN ('fact_orders_even','fact_orders_custkey','fact_orders_prodkey')
+GROUP BY 1,2
+ORDER BY 1,2;
 
 -- Discussion:
 -- High skew_rows and unbalanced blocks suggest a poor/distorted distkey.
