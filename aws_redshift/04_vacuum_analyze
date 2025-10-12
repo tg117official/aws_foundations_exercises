@@ -1,0 +1,52 @@
+-- =====================================================
+-- VACUUM & ANALYZE: Syntax Reference for Common Scenarios
+-- =====================================================
+
+-- ---------- 1. Reclaim deleted space & re-sort entire table ----------
+VACUUM FULL schema_name.table_name;
+
+-- ---------- 2. Remove deleted rows only (keep current sort order) ----------
+VACUUM DELETE ONLY schema_name.table_name;
+
+-- ---------- 3. Re-sort table data without reclaiming space ----------
+VACUUM SORT ONLY schema_name.table_name;
+
+-- ---------- 4. Rebuild interleaved sort key statistics ----------
+VACUUM REINDEX schema_name.table_name;
+
+-- ---------- 5. Run VACUUM on all tables in a schema ----------
+VACUUM FULL schema_name;
+
+-- ---------- 6. Run VACUUM across the entire database ----------
+VACUUM;
+
+-- ---------- 7. Collect statistics for a single table ----------
+ANALYZE schema_name.table_name;
+
+-- ---------- 8. Collect statistics for specific columns ----------
+ANALYZE schema_name.table_name (column1, column2);
+
+-- ---------- 9. Analyze all tables in a schema ----------
+ANALYZE schema_name;
+
+-- ---------- 10. Analyze entire database ----------
+ANALYZE;
+
+-- ---------- 11. Vacuum + Analyze combo (common maintenance task) ----------
+VACUUM FULL schema_name.table_name;
+ANALYZE schema_name.table_name;
+
+-- ---------- 12. Post-insert or post-copy optimization ----------
+-- Run after bulk inserts or COPY loads to refresh stats
+ANALYZE schema_name.table_name;
+
+-- ---------- 13. Check unsorted percentage for verification ----------
+SELECT "table", unsorted
+FROM svv_table_info
+WHERE schema = 'schema_name'
+ORDER BY unsorted DESC;
+
+-- ---------- 14. Optional: Schedule lightweight nightly clean-up ----------
+-- Example: Just reclaim deleted rows & refresh stats
+VACUUM DELETE ONLY schema_name.table_name;
+ANALYZE schema_name.table_name;

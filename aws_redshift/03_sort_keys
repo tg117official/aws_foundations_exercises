@@ -1,0 +1,299 @@
+-- ===============================================================
+-- AWS Redshift: Sort Keys – Comprehensive Hands-On Lab (with checks)
+-- Covers: NO SORT vs COMPOUND vs INTERLEAVED, block pruning effect,
+--         unsorted %, VACUUM SORT ONLY, ANALYZE, and validations.
+-- ===============================================================
+
+-- ---------- 0) Housekeeping ----------
+DROP SCHEMA IF EXISTS sortkey_lab CASCADE;
+CREATE SCHEMA sortkey_lab;
+SET search_path TO sortkey_lab;
+
+-- ---------- 1) Helper data generator (no external files) ----------
+-- We'll synthesize ~9,000 rows: 100 x 30 x 3
+-- date range = 2025-09-01 .. 2025-10-30 (60 days window)
+CREATE TEMP TABLE _seed_10(n INT);
+INSERT INTO _seed_10 VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+
+CREATE TEMP TABLE _seed_30(n INT);
+INSERT INTO _seed_30
+SELECT n FROM _seed_10
+UNION ALL SELECT n+10 FROM _seed_10
+UNION ALL SELECT n+20 FROM _seed_10;
+
+-- ---------- 2) Base tables (same columns, different sort strategies) ----------
+-- 2A) No explicit sort key
+CREATE TABLE sales_nosort (
+  sale_id     INT,
+  sale_date   DATE,
+  customer_id INT,
+  region      VARCHAR(16),
+  category    VARCHAR(24),
+  amount      DECIMAL(12,2)
+)
+DISTSTYLE EVEN;  -- distribution is not our focus here
+
+-- 2B) Compound sort (date leading, then customer)
+CREATE TABLE sales_compound_date_customer (
+  sale_id     INT,
+  sale_date   DATE,
+  customer_id INT,
+  region      VARCHAR(16),
+  category    VARCHAR(24),
+  amount      DECIMAL(12,2)
+)
+DISTSTYLE EVEN
+SORTKEY (sale_date, customer_id);
+
+-- 2C) Interleaved sort over 3 columns (multi-dimensional pruning)
+CREATE TABLE sales_interleaved_rcd (
+  sale_id     INT,
+  sale_date   DATE,
+  customer_id INT,
+  region      VARCHAR(16),
+  category    VARCHAR(24),
+  amount      DECIMAL(12,2)
+)
+DISTSTYLE EVEN
+INTERLEAVED SORTKEY (region, category, sale_date);
+
+-- ---------- 3) Load identical synthetic data into the three tables ----------
+-- Pattern:
+--   sale_id = 1..9000
+--   sale_date = 2025-09-01 + (d % 60)
+--   customer_id = 1..100
+--   region ∈ {North, South, East}
+--   category ∈ {Electronics, Furniture, Accessories}
+--   amount = 1000..6000 pattern
+
+WITH gen AS (
+  SELECT
+    (a.n*90 + b.n*9 + c.n + 1)                  AS sale_id,         -- 1..9000
+    DATE '2025-09-01' + ((a.n*3 + b.n) % 60)    AS sale_date,
+    ((a.n*3 + b.n) % 100) + 1                   AS customer_id,
+    CASE ((a.n + b.n + c.n) % 3)
+      WHEN 0 THEN 'North' WHEN 1 THEN 'South' ELSE 'East' END       AS region,
+    CASE (c.n % 3)
+      WHEN 0 THEN 'Electronics' WHEN 1 THEN 'Furniture' ELSE 'Accessories' END AS category,
+    1000 + ((a.n*30 + b.n*3 + c.n) % 50) * 100  AS amount
+  FROM _seed_100 a
+  JOIN _seed_10  b ON 1=1
+  JOIN _seed_10  c ON 1=1
+), _seed_100 AS (
+  SELECT n FROM (
+    SELECT n FROM _seed_10
+    UNION ALL SELECT n+10 FROM _seed_10
+    UNION ALL SELECT n+20 FROM _seed_10
+    UNION ALL SELECT n+30 FROM _seed_10
+    UNION ALL SELECT n+40 FROM _seed_10
+    UNION ALL SELECT n+50 FROM _seed_10
+    UNION ALL SELECT n+60 FROM _seed_10
+    UNION ALL SELECT n+70 FROM _seed_10
+    UNION ALL SELECT n+80 FROM _seed_10
+    UNION ALL SELECT n+90 FROM _seed_10
+  )
+)
+INSERT INTO sales_nosort
+SELECT * FROM gen;
+
+INSERT INTO sales_compound_date_customer
+SELECT * FROM sales_nosort;
+
+INSERT INTO sales_interleaved_rcd
+SELECT * FROM sales_nosort;
+
+ANALYZE;  -- keep stats fresh for sensible EXPLAINs
+
+-- ===============================================================
+-- VALIDATION 0: Confirm row counts match
+-- ===============================================================
+SELECT 'sales_nosort' AS table_name, COUNT(*) AS rows FROM sales_nosort
+UNION ALL SELECT 'sales_compound_date_customer', COUNT(*) FROM sales_compound_date_customer
+UNION ALL SELECT 'sales_interleaved_rcd', COUNT(*) FROM sales_interleaved_rcd;
+
+-- ===============================================================
+-- VALIDATION 1: What sort keys are set? (position order)
+-- ===============================================================
+SELECT table_schema, table_name, column, ordinal_position, sortkey
+FROM svv_columns
+WHERE table_schema='sortkey_lab'
+ORDER BY table_name, ordinal_position;
+
+-- If available on your cluster:
+--   SVV_TABLE_INFO shows unsorted %, first sortkey column name, and whether interleaved.
+SELECT "table", sortkey1, sortkey_num, unsorted, interleaved
+FROM svv_table_info
+WHERE schema='sortkey_lab'
+ORDER BY "table";
+
+-- ===============================================================
+-- EXERCISE 1: Range filter pruning – NO SORT vs COMPOUND (date)
+-- Goal: Show block pruning on date ranges when date is the leading sort key.
+-- ===============================================================
+
+-- E1-A) Explain both queries to compare plans
+EXPLAIN
+SELECT SUM(amount)
+FROM sales_nosort
+WHERE sale_date BETWEEN '2025-10-01' AND '2025-10-10';
+
+EXPLAIN
+SELECT SUM(amount)
+FROM sales_compound_date_customer
+WHERE sale_date BETWEEN '2025-10-01' AND '2025-10-10';
+
+-- E1-B) Run both queries (optional timing in client)
+SELECT 'nosort' AS t, SUM(amount) AS total
+FROM sales_nosort
+WHERE sale_date BETWEEN '2025-10-01' AND '2025-10-10'
+UNION ALL
+SELECT 'compound_date_customer', SUM(amount)
+FROM sales_compound_date_customer
+WHERE sale_date BETWEEN '2025-10-01' AND '2025-10-10';
+
+-- Expect the compound-sorted table to scan fewer blocks (faster) due to zone maps.
+
+-- ===============================================================
+-- EXERCISE 2: ORDER BY and GROUP BY on leading sort key
+-- Goal: Pre-sorted data reduces work for ORDER BY / grouping on the sort key.
+-- ===============================================================
+
+EXPLAIN
+SELECT sale_date, SUM(amount)
+FROM sales_compound_date_customer
+GROUP BY sale_date
+ORDER BY sale_date;
+
+-- Compare with no sort:
+EXPLAIN
+SELECT sale_date, SUM(amount)
+FROM sales_nosort
+GROUP BY sale_date
+ORDER BY sale_date;
+
+-- (Run if you want)
+SELECT sale_date, SUM(amount) AS total
+FROM sales_compound_date_customer
+GROUP BY sale_date
+ORDER BY sale_date
+LIMIT 10;
+
+-- ===============================================================
+-- EXERCISE 3: Compound sort – leading vs non-leading column effect
+-- Goal: Leading key helps most; second key helps inside each first-key segment.
+-- ===============================================================
+
+-- Filter ONLY on the 2nd column (customer_id) – less effective on compound:
+EXPLAIN
+SELECT COUNT(*) FROM sales_compound_date_customer WHERE customer_id BETWEEN 10 AND 20;
+
+-- Filter on BOTH (date first, then customer) – best effect:
+EXPLAIN
+SELECT COUNT(*)
+FROM sales_compound_date_customer
+WHERE sale_date BETWEEN '2025-09-15' AND '2025-09-20'
+  AND customer_id BETWEEN 10 AND 20;
+
+-- ===============================================================
+-- EXERCISE 4: Interleaved sort – filters on any column benefit
+-- Goal: Show that filters on region/category/date all get pruning.
+-- ===============================================================
+
+EXPLAIN
+SELECT COUNT(*) FROM sales_interleaved_rcd WHERE region = 'South';
+
+EXPLAIN
+SELECT COUNT(*) FROM sales_interleaved_rcd WHERE category = 'Electronics';
+
+EXPLAIN
+SELECT COUNT(*) FROM sales_interleaved_rcd
+WHERE sale_date BETWEEN '2025-09-10' AND '2025-09-20';
+
+-- Combined filters also prune well:
+EXPLAIN
+SELECT SUM(amount)
+FROM sales_interleaved_rcd
+WHERE region='East' AND category='Accessories'
+  AND sale_date BETWEEN '2025-10-01' AND '2025-10-15';
+
+-- ===============================================================
+-- EXERCISE 5: Unsorted % – demonstrate, then fix with VACUUM SORT ONLY
+-- Goal: Insert out-of-order rows to degrade sort order; verify unsorted%; fix.
+-- ===============================================================
+
+-- 5A) Insert late arriving rows with old dates (out of sort order)
+INSERT INTO sales_compound_date_customer
+SELECT sale_id+100000, DATE '2025-09-03', customer_id, region, category, amount
+FROM sales_nosort
+WHERE sale_id BETWEEN 1 AND 200;  -- small batch, clearly out-of-order by date
+
+ANALYZE sales_compound_date_customer;
+
+-- 5B) Check UNSORTED % before vacuum
+SELECT "table", unsorted
+FROM svv_table_info
+WHERE schema='sortkey_lab' AND "table"='sales_compound_date_customer';
+
+-- 5C) Fix sort order
+VACUUM SORT ONLY sales_compound_date_customer;
+ANALYZE sales_compound_date_customer;
+
+-- 5D) Verify UNSORTED % after vacuum (should drop significantly)
+SELECT "table", unsorted
+FROM svv_table_info
+WHERE schema='sortkey_lab' AND "table"='sales_compound_date_customer';
+
+-- ===============================================================
+-- EXERCISE 6: Choosing sort strategy – scenarios checklist (queries)
+-- Goal: Compare plans to reason about design choices.
+-- ===============================================================
+
+-- 6A) Time-series dashboard (recent 10 days) -> date-leading compound is ideal
+EXPLAIN
+SELECT sale_date, SUM(amount)
+FROM sales_compound_date_customer
+WHERE sale_date >= (CURRENT_DATE - 10)
+GROUP BY sale_date;
+
+-- 6B) Dimensional slicing by region/category -> interleaved shines
+EXPLAIN
+SELECT region, category, SUM(amount)
+FROM sales_interleaved_rcd
+WHERE category IN ('Electronics','Accessories')
+GROUP BY region, category;
+
+-- 6C) Ad-hoc by customer only -> interleaved may beat compound if date is absent
+EXPLAIN
+SELECT customer_id, SUM(amount)
+FROM sales_interleaved_rcd
+WHERE customer_id BETWEEN 50 AND 150
+GROUP BY customer_id;
+
+-- ===============================================================
+-- VALIDATION 2: Show sort key columns and order again
+-- ===============================================================
+SELECT table_name,
+       LISTAGG(column || ':' || sortkey, ',') WITHIN GROUP (ORDER BY sortkey) AS sk_columns_positions
+FROM svv_columns
+WHERE table_schema='sortkey_lab' AND sortkey > 0
+GROUP BY table_name
+ORDER BY table_name;
+
+-- If your cluster supports it, this view lists interleaved sort key columns:
+-- (If it does not exist on your version, skip this query.)
+-- SELECT * FROM svv_interleaved_columns WHERE schemaname='sortkey_lab';
+
+-- ===============================================================
+-- EXERCISE 7: Maintenance reminder – ANALYZE keeps plans smart
+-- ===============================================================
+
+-- After bulk loads/changes, refresh stats:
+ANALYZE sales_nosort;
+ANALYZE sales_compound_date_customer;
+ANALYZE sales_interleaved_rcd;
+
+-- Quick health snapshot
+SELECT "table", sortkey1, sortkey_num, interleaved, unsorted, size
+FROM svv_table_info
+WHERE schema='sortkey_lab'
+ORDER BY "table";

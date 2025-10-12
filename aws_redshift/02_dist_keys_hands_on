@@ -1,0 +1,413 @@
+-- ============================================================
+-- AWS Redshift: DISTSTYLE / DISTKEY – End-to-End Hands-On Lab
+-- Covers: EVEN, KEY, ALL; choosing keys; join behavior; skew;
+--         validations via system views; EXPLAIN interpretation.
+-- ============================================================
+
+-- ---------- 0) Housekeeping ----------
+DROP SCHEMA IF EXISTS distkey_lab CASCADE;
+CREATE SCHEMA distkey_lab;
+SET search_path TO distkey_lab;
+
+-- Small helper: we’ll use simple cross-joins on inline VALUES
+-- to generate a few thousand rows without external files.
+
+-- ---------- 1) Dimension tables ----------
+-- 1A) Small dimension copied on every node (DISTSTYLE ALL)
+CREATE TABLE dim_customer_all (
+  customer_id   INT,
+  customer_name VARCHAR(60),
+  region        VARCHAR(20)
+)
+DISTSTYLE ALL;
+
+
+INSERT INTO dim_customer_all VALUES
+(1,'Asha','North'),(2,'Ravi','South'),(3,'Neha','East'),(4,'Kabir','West'),
+(5,'Sara','North'),(6,'Manoj','South'),(7,'Isha','East'),(8,'Rohan','West'),
+(9,'Meera','North'),(10,'Kunal','South'),(11,'Tara','East'),(12,'Arjun','West'),
+(13,'Vikram','North'),(14,'Divya','South'),(15,'Amit','East'),(16,'Rekha','West'),
+(17,'Nikhil','North'),(18,'Pooja','South'),(19,'Anita','East'),(20,'Raj','West');
+
+
+-- 1B) Same dimension but distributed by KEY (customer_id)
+CREATE TABLE dim_customer_key (
+  customer_id   INT,
+  customer_name VARCHAR(60),
+  region        VARCHAR(20)
+)
+DISTSTYLE KEY
+DISTKEY (customer_id);
+
+-- Populate both dims identically
+
+INSERT INTO dim_customer_key SELECT * FROM dim_customer_all;
+
+
+
+-- Small product dimension to demonstrate alternative keys
+CREATE TABLE dim_product_all (
+  product_id INT,
+  category   VARCHAR(30),
+  price      DECIMAL(10,2)
+)
+DISTSTYLE ALL;
+
+
+INSERT INTO dim_product_all VALUES
+(1,'Electronics',5500.00),(2,'Furniture',8700.00),(3,'Accessories',2500.00),
+(4,'Electronics',7200.00),(5,'Furniture',6400.00),(6,'Accessories',1800.00),
+(7,'Electronics',4600.00),(8,'Furniture',9100.00),(9,'Accessories',3000.00),
+(10,'Electronics',6900.00),(11,'Furniture',7700.00),(12,'Accessories',3300.00),
+(13,'Electronics',8000.00),(14,'Furniture',6200.00),(15,'Accessories',2100.00),
+(16,'Electronics',5100.00),(17,'Furniture',8500.00),(18,'Accessories',2700.00),
+(19,'Electronics',9000.00),(20,'Furniture',7000.00);
+
+
+
+
+-- ---------- 2) Fact tables ----------
+-- 2A) EVEN distribution (round-robin) – simple baseline
+CREATE TABLE fact_orders_even (
+  order_id     INT,
+  customer_id  INT,
+  product_id   INT,
+  order_date   DATE,
+  qty          INT,
+  amount       DECIMAL(12,2)
+)
+DISTSTYLE EVEN;
+
+-- 2B) KEY distribution on customer_id – co-locates with dim_customer_key
+CREATE TABLE fact_orders_custkey (
+  order_id     INT,
+  customer_id  INT,
+  product_id   INT,
+  order_date   DATE,
+  qty          INT,
+  amount       DECIMAL(12,2)
+)
+DISTSTYLE KEY
+DISTKEY (customer_id);
+
+INSERT INTO fact_orders_even VALUES
+(1,1,1,'2025-10-01',2,11000.00),
+(2,2,2,'2025-10-02',1,8700.00),
+(3,3,3,'2025-10-02',3,7500.00),
+(4,4,4,'2025-10-03',2,14400.00),
+(5,5,5,'2025-10-03',1,6400.00),
+(6,6,6,'2025-10-04',4,7200.00),
+(7,7,7,'2025-10-04',2,9200.00),
+(8,8,8,'2025-10-05',1,9100.00),
+(9,9,9,'2025-10-05',5,15000.00),
+(10,10,10,'2025-10-06',2,13800.00),
+(11,11,11,'2025-10-06',3,23100.00),
+(12,12,12,'2025-10-07',1,3300.00),
+(13,13,13,'2025-10-07',2,16000.00),
+(14,14,14,'2025-10-08',4,24800.00),
+(15,15,15,'2025-10-08',2,4200.00),
+(16,16,16,'2025-10-09',3,15300.00),
+(17,17,17,'2025-10-09',1,8500.00),
+(18,18,18,'2025-10-10',2,5400.00),
+(19,19,19,'2025-10-10',3,27000.00),
+(20,20,20,'2025-10-10',2,14000.00);
+
+
+INSERT INTO fact_orders_prodkey SELECT * FROM fact_orders_even;
+
+
+
+-- 2C) KEY distribution on product_id – alternative co-location choice
+CREATE TABLE fact_orders_prodkey (
+  order_id     INT,
+  customer_id  INT,
+  product_id   INT,
+  order_date   DATE,
+  qty          INT,
+  amount       DECIMAL(12,2)
+)
+DISTSTYLE KEY
+DISTKEY (product_id);
+
+-- Populate facts
+
+INSERT INTO fact_orders_custkey SELECT * FROM fact_orders_even;
+INSERT INTO fact_orders_prodkey SELECT * FROM fact_orders_even;
+
+ANALYZE;  -- keep stats fresh for sensible EXPLAINs
+
+-- ============================================================
+-- VALIDATIONS: How to check DISTSTYLE / DISTKEY / skew / slices
+-- ============================================================
+
+-- V1) At-a-glance table info: distribution, distkey, skew, size
+SELECT database, schema, "table", diststyle, distkey, skew_rows, size
+FROM svv_table_info
+WHERE schema = 'distkey_lab'
+ORDER BY "table";
+
+-- V2) Column-level flags: which column is distkey, sortkey order, encoding
+SELECT table_schema, table_name, column, ordinal_position,
+       distkey, sortkey, encoding
+FROM svv_columns
+WHERE table_schema = 'distkey_lab'
+ORDER BY table_name, ordinal_position;
+
+-- V3) Per-slice storage to eyeball distribution (blocks by slice)
+-- (svv_diskusage exists on most clusters; if not, skip this check)
+SELECT
+  s.name      AS table_name,
+  d.slice,
+  SUM(d.blocks) AS blocks
+FROM svv_diskusage d
+JOIN svv_table_info s ON s.table_id = d.tbl
+WHERE s.schema = 'distkey_lab'
+  AND s."table" IN ('fact_orders_even','fact_orders_custkey','fact_orders_prodkey')
+GROUP BY 1,2
+ORDER BY 1,2;
+
+-- Interpretation:
+-- * EVEN should look balanced across slices.
+-- * KEY can skew if the chosen key is skewed in the data.
+
+-- ============================================================
+-- EXERCISE 1: EVEN fact + ALL dimension (broadcasted dim join)
+-- Goal: Show why ALL is great for small lookup dims.
+-- ============================================================
+
+-- E1-A) Join fact (EVEN) with dim ALL – expect local joins (no big shuffle)
+EXPLAIN
+SELECT dc.customer_name, SUM(f.amount)
+FROM fact_orders_even f
+JOIN dim_customer_all dc USING (customer_id)
+GROUP BY dc.customer_name;
+
+-- Run and time it (optional)
+SELECT dc.customer_name, SUM(f.amount) AS total_amount
+FROM fact_orders_even f
+JOIN dim_customer_all dc USING (customer_id)
+GROUP BY dc.customer_name
+ORDER BY total_amount DESC
+LIMIT 10;
+
+-- Validation tip:
+-- In EXPLAIN, look for fewer DS_DIST_* shuffle steps, often a DS_BCAST_INNER of the tiny dim,
+-- but the ALL style means a local copy exists on every node so it’s cheap.
+
+-- ============================================================
+-- EXERCISE 2: KEY on both sides of the join (co-location)
+-- Goal: Avoid shuffle by picking same distkey on both large tables.
+-- ============================================================
+
+-- E2-A) Join KEY fact (customer_id) with KEY dim (customer_id)
+EXPLAIN
+SELECT dc.customer_name, SUM(f.amount)
+FROM fact_orders_custkey f
+JOIN dim_customer_key dc USING (customer_id)
+GROUP BY dc.customer_name;
+
+-- Expectation:
+-- Plan should show co-located join (DS_DIST_NONE for the join step).
+-- This is the ideal pattern for large fact ↔ large dim/fact joins.
+
+-- Quick runtime check
+SELECT COUNT(*) FROM (
+  SELECT dc.customer_name, SUM(f.amount)
+  FROM fact_orders_custkey f
+  JOIN dim_customer_key dc USING (customer_id)
+  GROUP BY dc.customer_name
+) q;
+
+-- ============================================================
+-- EXERCISE 3: Mismatched keys cause redistribution/broadcast
+-- Goal: Show cost of not matching distkeys with join columns.
+-- ============================================================
+
+-- E3-A) Join fact distributed by product with dim distributed by customer
+EXPLAIN
+SELECT dc.region, SUM(fp.amount)
+FROM fact_orders_prodkey fp
+JOIN dim_customer_key dc USING (customer_id)
+GROUP BY dc.region;
+
+-- Expectation:
+-- You should see DS_DIST_* redistribution or broadcast because data isn’t co-located
+-- on the join key (customer_id), since fp is distributed by product_id.
+
+-- ============================================================
+-- EXERCISE 4: Choosing between multiple candidate keys
+-- Scenario: Facts often join with both customer and product dims.
+-- Goal: Show trade-off and “one big join optimized” idea.
+-- ============================================================
+
+-- E4-A) Compare these two queries and observe EXPLAIN differences:
+
+-- Query A: Joins on customer (benefits fact_orders_custkey)
+EXPLAIN
+SELECT dc.region, SUM(fc.amount)
+FROM fact_orders_custkey fc
+JOIN dim_customer_key dc USING (customer_id)
+GROUP BY dc.region;
+
+-- Query B: Joins on product (benefits fact_orders_prodkey)
+EXPLAIN
+SELECT dp.category, SUM(fp.amount)
+FROM fact_orders_prodkey fp
+JOIN dim_product_all dp USING (product_id)
+GROUP BY dp.category;
+
+-- Discussion:
+-- You can’t optimize for every join. Pick distkey to optimize your largest/most frequent join.
+-- For other joins, rely on ALL for small dims or accept a broadcast/redistribution.
+
+-- ============================================================
+-- EXERCISE 5: Skew demonstration and detection
+-- Goal: Show how a bad distkey can overload one slice.
+-- ============================================================
+
+-- 5A) Create a skewed fact: most orders have customer_id = 1
+DROP TABLE IF EXISTS fact_orders_skewed;
+CREATE TABLE fact_orders_skewed (
+  order_id     INT,
+  customer_id  INT,
+  product_id   INT,
+  order_date   DATE,
+  qty          INT,
+  amount       DECIMAL(12,2)
+)
+DISTSTYLE KEY
+DISTKEY (customer_id);
+
+INSERT INTO fact_orders_skewed
+SELECT order_id, customer_id, product_id, order_date, qty, amount
+FROM fact_orders_even
+WHERE order_id <= 9000;  -- first 9k rows normal
+
+-- Inject skew: 1000 rows all for customer_id = 1
+
+-- Skew: repeat same customer_id many times
+INSERT INTO fact_orders_skewed VALUES
+(11,1,11,'2025-10-07',3,23100.00),
+(12,1,12,'2025-10-07',1,3300.00),
+(13,1,13,'2025-10-08',2,16000.00),
+(14,1,14,'2025-10-08',4,24800.00),
+(15,1,15,'2025-10-09',2,4200.00),
+(16,1,16,'2025-10-09',3,15300.00),
+(17,1,17,'2025-10-09',1,8500.00),
+(18,1,18,'2025-10-10',2,5400.00),
+(19,1,19,'2025-10-10',3,27000.00),
+(20,1,20,'2025-10-10',2,14000.00);
+
+ANALYZE fact_orders_skewed;
+
+-- 5B) Check skew indicators
+SELECT database, schema, "table", diststyle, distkey, skew_rows, size
+FROM svv_table_info
+WHERE schema = 'distkey_lab' AND "table" = 'fact_orders_skewed';
+
+-- 5C) Per-slice block counts – skewed table should show imbalance
+SELECT
+  d.slice,
+  SUM(d.blocks) AS blocks
+FROM svv_diskusage d
+JOIN svv_table_info s ON s.table_id = d.tbl
+WHERE s.schema = 'distkey_lab' AND s."table" = 'fact_orders_skewed'
+GROUP BY 1
+ORDER BY 1;
+
+-- Discussion:
+-- High skew_rows and unbalanced blocks suggest a poor/distorted distkey.
+-- Consider a different key or EVEN; or pre-salt/hyperloglog tricks for extreme skews.
+
+-- ============================================================
+-- EXERCISE 6: Verifying join behavior via EXPLAIN tokens
+-- Goal: Learn to read DS_DIST_* and DS_BCAST_* in plans.
+-- ============================================================
+
+-- 6A) Co-located join (ideal) – expect DS_DIST_NONE
+EXPLAIN
+SELECT COUNT(*)
+FROM fact_orders_custkey f
+JOIN dim_customer_key d USING (customer_id);
+
+-- 6B) Broadcast of small table – expect DS_BCAST_INNER (or equivalent)
+EXPLAIN
+SELECT COUNT(*)
+FROM fact_orders_even f
+JOIN dim_product_all p USING (product_id);
+
+-- 6C) Redistribution – expect DS_DIST_BOTH or similar
+EXPLAIN
+SELECT COUNT(*)
+FROM fact_orders_prodkey f
+JOIN dim_customer_key d USING (customer_id);
+
+-- Tip:
+-- DS_DIST_NONE: no redistribution (good)
+-- DS_BCAST_INNER: small table broadcasted (ok)
+-- DS_DIST_BOTH / DS_DIST_ALL_NONE: redistribution happening (costly on big tables)
+
+-- ============================================================
+-- EXERCISE 7: Changing diststyle/distkey (safe CTAS pattern)
+-- Goal: Show how to switch design without ALTER limitations.
+-- ============================================================
+
+-- Create improved table (e.g., move from EVEN to KEY on customer_id)
+DROP TABLE IF EXISTS fact_orders_even_rekey;
+CREATE TABLE fact_orders_even_rekey
+DISTSTYLE KEY
+DISTKEY (customer_id)
+AS
+SELECT * FROM fact_orders_even;
+
+ANALYZE fact_orders_even_rekey;
+
+-- Validate new table design
+SELECT database, schema, "table", diststyle, distkey
+FROM svv_table_info
+WHERE schema = 'distkey_lab' AND "table" = 'fact_orders_even_rekey';
+
+-- (Optional) Swap names after validation:
+-- BEGIN;
+--   ALTER TABLE fact_orders_even RENAME TO fact_orders_even_old;
+--   ALTER TABLE fact_orders_even_rekey RENAME TO fact_orders_even;
+-- COMMIT;
+
+-- ============================================================
+-- EXERCISE 8: “When ALL hurts” sanity check
+-- Goal: Remind that ALL is only for small dims.
+-- ============================================================
+
+-- Show size to justify ALL use (should be small)
+SELECT "table", diststyle, size
+FROM svv_table_info
+WHERE schema='distkey_lab' AND "table" IN ('dim_customer_all','dim_product_all')
+ORDER BY size DESC;
+
+-- If a dimension grows large, consider KEY instead of ALL to avoid N-way duplication.
+
+-- ============================================================
+-- QUICK RECAP QUERIES (cheat-sheet)
+-- ============================================================
+
+-- What is my table’s diststyle / distkey?
+SELECT database, schema, "table", diststyle, distkey, skew_rows
+FROM svv_table_info
+WHERE schema='distkey_lab'
+ORDER BY "table";
+
+-- Which column is the distkey?
+SELECT table_name, column
+FROM svv_columns
+WHERE table_schema='distkey_lab' AND distkey = true;
+
+-- How balanced is data across slices?
+SELECT s.name AS table_name, d.slice, SUM(d.blocks) AS blocks
+FROM svv_diskusage d
+JOIN svv_table_info s ON s.table_id = d.tbl
+WHERE s.schema='distkey_lab'
+GROUP BY 1,2
+ORDER BY 1,2;
+
+-- Do my joins redistribute or broadcast?
+-- Use EXPLAIN on the exact query and look for DS_* markers as shown above.
